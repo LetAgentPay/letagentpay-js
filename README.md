@@ -141,6 +141,37 @@ const sendEmail = guard(
 );
 ```
 
+## x402 Crypto-Micropayments
+
+Authorize on-chain USDC payments via the x402 protocol. Same policy engine, same token — different payment rail.
+
+```typescript
+const client = new LetAgentPay({ token: "agt_xxx" });
+
+// Agent receives HTTP 402 — ask LAP for authorization
+const auth = await client.x402.authorize({
+  amountUsd: 0.05,
+  payTo: "0xMerchant...",
+  resourceUrl: "https://api.example.com/data",
+});
+
+if (auth.authorized) {
+  // Sign tx with your own wallet, then report
+  await client.x402.report({
+    authorizationId: auth.authorizationId!,
+    txHash: "0xabc123...",
+  });
+} else {
+  console.log(`Declined: ${auth.reason}`);
+}
+
+// Check x402 budget and wallets
+const budget = await client.x402.budget();
+
+// Register wallet address (LAP never holds keys)
+await client.x402.registerWallet({ walletAddress: "0x1234..." });
+```
+
 ## Self-Hosted
 
 Point the SDK to your own LetAgentPay instance:

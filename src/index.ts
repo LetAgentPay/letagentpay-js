@@ -15,4 +15,10 @@ export type {
   PurchaseResult,
   RequestList,
   RequestStatus,
+  X402AuthorizeOptions,
+  X402AuthorizeResult,
+  X402RegisterWalletOptions,
+  X402ReportOptions,
+  X402ReportResult,
+  X402WalletInfo,
 } from "./types.js";

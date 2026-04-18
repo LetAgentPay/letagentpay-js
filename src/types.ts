@@ -100,3 +100,65 @@ export interface LetAgentPayConfig {
   token?: string;
   baseUrl?: string;
 }
+
+// --- x402 types ---
+
+/** x402 payment requirements from HTTP 402 response. */
+export interface X402PaymentRequirements {
+  scheme: string;
+  network: string;
+  amount: string;
+  asset: string;
+  pay_to: string;
+  resource?: string;
+}
+
+/** Options for x402 authorize request. */
+export interface X402AuthorizeOptions {
+  amountUsd: number;
+  asset?: string;
+  network?: string;
+  payTo: string;
+  resourceUrl?: string;
+  category?: string;
+}
+
+/** Response from x402 authorize. */
+export interface X402AuthorizeResult {
+  authorized: boolean;
+  authorizationId: string | null;
+  reason: string | null;
+  expiresAt: string | null;
+  remainingDailyBudget: number | null;
+  remainingMonthlyBudget: number | null;
+}
+
+/** Options for x402 report. */
+export interface X402ReportOptions {
+  authorizationId: string;
+  txHash: string;
+  actualAmountUsd?: number;
+  resourceUrl?: string;
+}
+
+/** Response from x402 report. */
+export interface X402ReportResult {
+  recorded: boolean;
+  transactionId: string;
+}
+
+/** Agent wallet info. */
+export interface X402WalletInfo {
+  walletAddress: string;
+  chain: string;
+  walletProvider: string | null;
+  isActive: boolean;
+  createdAt: string | null;
+}
+
+/** Options for registering a wallet. */
+export interface X402RegisterWalletOptions {
+  walletAddress: string;
+  chain?: string;
+  walletProvider?: string;
+}

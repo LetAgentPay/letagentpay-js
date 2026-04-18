@@ -12,6 +12,12 @@ import type {
   PurchaseResult,
   RequestList,
   RequestStatus,
+  X402AuthorizeOptions,
+  X402AuthorizeResult,
+  X402RegisterWalletOptions,
+  X402ReportOptions,
+  X402ReportResult,
+  X402WalletInfo,
 } from "./types.js";
 
 const DEFAULT_BASE_URL = "https://api.letagentpay.com/api/v1/agent-api";
@@ -134,6 +140,9 @@ export class LetAgentPay {
   private readonly token: string;
   private readonly baseUrl: string;
 
+  /** x402 crypto-micropayment methods. */
+  readonly x402: X402Namespace;
+
   constructor(config: LetAgentPayConfig = {}) {
     const resolvedToken = config.token ?? getEnv("LETAGENTPAY_TOKEN");
     if (!resolvedToken) {
@@ -148,6 +157,7 @@ export class LetAgentPay {
       getEnv("LETAGENTPAY_BASE_URL") ??
       DEFAULT_BASE_URL
     ).replace(/\/+$/, "");
+    this.x402 = new X402Namespace(this.token, this.baseUrl);
   }
 
   private async request(
@@ -242,5 +252,134 @@ export class LetAgentPay {
 
     const data = await this.request("GET", "/requests", { params });
     return parseRequestList(data);
+  }
+}
+
+// --- x402 namespace ---
+
+function parseX402AuthorizeResult(
+  data: Record<string, unknown>,
+): X402AuthorizeResult {
+  return {
+    authorized: data.authorized as boolean,
+    authorizationId: (data.authorization_id as string) ?? null,
+    reason: (data.reason as string) ?? null,
+    expiresAt: (data.expires_at as string) ?? null,
+    remainingDailyBudget:
+      data.remaining_daily_budget != null
+        ? Number(data.remaining_daily_budget)
+        : null,
+    remainingMonthlyBudget:
+      data.remaining_monthly_budget != null
+        ? Number(data.remaining_monthly_budget)
+        : null,
+  };
+}
+
+function parseX402WalletInfo(data: Record<string, unknown>): X402WalletInfo {
+  return {
+    walletAddress: data.wallet_address as string,
+    chain: data.chain as string,
+    walletProvider: (data.wallet_provider as string) ?? null,
+    isActive: (data.is_active as boolean) ?? true,
+    createdAt: (data.created_at as string) ?? null,
+  };
+}
+
+class X402Namespace {
+  private readonly token: string;
+  private readonly baseUrl: string;
+
+  constructor(token: string, agentApiBaseUrl: string) {
+    this.token = token;
+    this.baseUrl = agentApiBaseUrl.includes("/agent-api")
+      ? agentApiBaseUrl.replace("/agent-api", "/x402")
+      : agentApiBaseUrl.replace(/\/[^/]+$/, "/x402");
+  }
+
+  private async request(
+    method: string,
+    path: string,
+    options?: { body?: unknown },
+  ): Promise<Record<string, unknown>> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json",
+      },
+      body: options?.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    const data = (await response.json()) as Record<string, unknown>;
+
+    if (!response.ok) {
+      const detail = (data.detail as string) ?? response.statusText;
+      throw new LetAgentPayError(response.status, detail);
+    }
+
+    return data;
+  }
+
+  /** Request authorization for an x402 payment. */
+  async authorize(options: X402AuthorizeOptions): Promise<X402AuthorizeResult> {
+    const body: Record<string, unknown> = {
+      payment_requirements: {
+        scheme: "exact",
+        network: options.network ?? "eip155:84532",
+        amount: String(Math.round(options.amountUsd * 1_000_000)),
+        asset: options.asset ?? "USDC",
+        pay_to: options.payTo,
+        resource: options.resourceUrl,
+      },
+      max_amount_usd: options.amountUsd,
+      category: options.category ?? "api",
+    };
+    const data = await this.request("POST", "/authorize", { body });
+    return parseX402AuthorizeResult(data);
+  }
+
+  /** Report a completed x402 transaction. */
+  async report(options: X402ReportOptions): Promise<X402ReportResult> {
+    const body: Record<string, unknown> = {
+      authorization_id: options.authorizationId,
+      tx_hash: options.txHash,
+    };
+    if (options.actualAmountUsd != null)
+      body.actual_amount_usd = options.actualAmountUsd;
+    if (options.resourceUrl) body.resource_url = options.resourceUrl;
+
+    const data = await this.request("POST", "/report", { body });
+    return {
+      recorded: data.recorded as boolean,
+      transactionId: data.transaction_id as string,
+    };
+  }
+
+  /** Get x402 budget state. */
+  async budget(): Promise<Record<string, unknown>> {
+    return this.request("GET", "/budget");
+  }
+
+  /** Register a wallet address. */
+  async registerWallet(
+    options: X402RegisterWalletOptions,
+  ): Promise<X402WalletInfo> {
+    const body: Record<string, unknown> = {
+      wallet_address: options.walletAddress,
+      chain: options.chain ?? "base",
+    };
+    if (options.walletProvider) body.wallet_provider = options.walletProvider;
+
+    const data = await this.request("POST", "/wallets", { body });
+    return parseX402WalletInfo(data);
+  }
+
+  /** List registered wallets. */
+  async listWallets(): Promise<X402WalletInfo[]> {
+    const data = await this.request("GET", "/wallets");
+    return (data as unknown as Record<string, unknown>[]).map(
+      parseX402WalletInfo,
+    );
   }
 }
