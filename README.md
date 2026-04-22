@@ -96,11 +96,11 @@ const policy = await client.getPolicy();
 
 ### `listCategories()`
 
-List valid purchase categories.
+List categories configured for the authenticated agent's account. Categories are per-account -- new accounts start with just `"other"`. Import defaults or create custom categories in the dashboard.
 
 ```typescript
 const categories = await client.listCategories();
-// ["groceries", "hardware", "software", "travel", ...]
+// ["groceries", "subscriptions", "other", ...]
 ```
 
 ### `myRequests(options?)`
